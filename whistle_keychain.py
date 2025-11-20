@@ -5,7 +5,7 @@ Key feature: 75° angled throat for whistle tone generation
 """
 
 import fullcontrol as fc
-from math import tau, cos, sin, radians
+from math import tau, cos, sin, radians, tan
 
 # Design parameters
 cylinder_diameter = 12  # Main body diameter (mm)
@@ -53,7 +53,7 @@ for layer in range(int(keyring_section_length / layer_height)):
 
         # Print arc from angle_gap to 2*pi - angle_gap
         partial_circle = fc.arcXY(
-            centre=fc.Point(x=0, y=cylinder_radius + 2, z=z),
+            centre=fc.Point(x=0, y=0, z=z),
             radius=cylinder_radius,
             start_angle=angle_gap,
             arc_angle=tau - 2*angle_gap,
@@ -97,7 +97,8 @@ for layer in range(throat_layers):
 
     # Calculate the ramp position (moves forward as we go up)
     # tan(75°) ≈ 3.73, but we use the complementary angle for the slope
-    ramp_offset = layer * layer_height / radians(throat_angle)
+    # The ramp should move radially inward as we go up to create the 75° angle
+    ramp_offset = layer * layer_height / tan(radians(throat_angle))
 
     # Create outer cylinder
     outer_circle = fc.circleXY(
@@ -132,19 +133,24 @@ for layer in range(throat_layers):
     # The ramp is a sloped surface that starts low and goes high
     if layer < throat_layers * 0.7:  # Only in lower part of throat
         ramp_points = []
-        ramp_y_start = -cylinder_radius * 0.5
-        ramp_y_end = -cylinder_radius * 0.2
+        # The ramp starts at full radius and moves inward as layers increase (creating 75° angle)
+        current_ramp_radius = cylinder_radius - ramp_offset
 
-        # Create angled ramp from back of throat
-        for i in range(10):
-            t = i / 9
-            x = (1 - t) * cylinder_radius * sin(throat_start_angle) + t * cylinder_radius * sin(throat_end_angle)
-            y = ramp_y_start + (ramp_y_end - ramp_y_start) * t
-            ramp_points.append(fc.Point(x=x, y=y, z=z))
+        # Only create ramp if it's still within valid radius
+        if current_ramp_radius > 0:
+            ramp_y_start = -current_ramp_radius * 0.5
+            ramp_y_end = -current_ramp_radius * 0.2
 
-        if len(ramp_points) > 0:
-            steps.extend(fc.travel_to(ramp_points[0]))
-            steps.extend(ramp_points)
+            # Create angled ramp from back of throat
+            for i in range(10):
+                t = i / 9
+                x = (1 - t) * current_ramp_radius * sin(throat_start_angle) + t * current_ramp_radius * sin(throat_end_angle)
+                y = ramp_y_start + (ramp_y_end - ramp_y_start) * t
+                ramp_points.append(fc.Point(x=x, y=y, z=z))
+
+            if len(ramp_points) > 0:
+                steps.extend(fc.travel_to(ramp_points[0]))
+                steps.extend(ramp_points)
 
 # Section 4: Resonating chamber (next 12mm)
 print("Creating resonating chamber...")
